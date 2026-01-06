@@ -1,46 +1,21 @@
-import { NodeGlobalsPolyfillPlugin } from "@esbuild-plugins/node-globals-polyfill";
-import { NodeModulesPolyfillPlugin } from "@esbuild-plugins/node-modules-polyfill";
-import basicSsl from "@vitejs/plugin-basic-ssl";
+import { defineConfig } from 'vite';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 
-export default {
-    base: "",
-    define: {
-       // "process.env.MapboxAccessToken": JSON.stringify(process.env.MapboxAccessToken)
-    },
-    optimizeDeps: {
-        esbuildOptions: {
-            plugins: [
-                NodeGlobalsPolyfillPlugin({
-                    process: true,
-                    buffer: true
-                }),
-                NodeModulesPolyfillPlugin()
-            ]
-        }
-    },
-    resolve: {
-        alias: [
-            // {
-            //     find: "@", replacement: resolve(__dirname, "./src"),
-            // },
-            {
-                find: "./runtimeConfig", replacement: "./runtimeConfig.browser"
-            },
-            {
-                find: "util",
-                replacement: "rollup-plugin-node-polyfills/polyfills/util"
-            }
-        ]
-    },
-    server: { https: true }, // Not needed for Vite 5+
-    plugins: [
-        basicSsl({
-            /** name of certification */
-            name: 'test',
-            // /** custom trust domains */
-            // domains: ['*.custom.com'],
-            // /** custom certification directory */
-            // certDir: '/Users/.../.devServer/cert'
-        }),
-    ]
-};
+export default defineConfig({
+  plugins: [
+    basicSsl(),
+  ],
+  server: {
+    https: true,
+    host: '0.0.0.0',
+    port: 5173
+  },
+  resolve: {
+    alias: {
+      '@iwsdk/core': '../immersive-web-sdk/packages/core/dist/index.js',
+      '@iwsdk/xr-input': '../immersive-web-sdk/packages/xr-input/dist/index.js',
+      '@iwsdk/locomotor': '../immersive-web-sdk/packages/locomotor/dist/index.js',
+      '@iwsdk/glxf': '../immersive-web-sdk/packages/glxf/dist/index.js'
+    }
+  }
+});
