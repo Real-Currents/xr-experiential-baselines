@@ -39,18 +39,6 @@ export default {
       //     find: "@", replacement: resolve(__dirname, "./src"),
       // },
       {
-          find: "@iwsdk/core", replacement: "../immersive-web-sdk/packages/core/dist"
-      },
-      {
-          find: "@iwsdk/xr-input", replacement: "../immersive-web-sdk/packages/xr-input/dist"
-      },
-      {
-          find: "@iwsdk/locomotor", replacement: "../immersive-web-sdk/packages/locomotor/dist"
-      },
-      {
-          find: "@iwsdk/glxf", replacement: "../immersive-web-sdk/packages/glxf/dist"
-      },
-      {
         find: "./runtimeConfig", replacement: "./runtimeConfig.browser"
       },
       {
