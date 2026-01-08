@@ -10,12 +10,12 @@ import { HTMLMesh } from "three/addons/interactive/HTMLMesh";
 import Stats from "three/addons/libs/stats.module";
 
 // IWSDK Integration - Step 1: Add imports
-import { IWSDKBootstrap } from './iwsdk/IWSDKBootstrap.js';
-import { EnhancedControllerManager } from './iwsdk/EnhancedControllerManager.js';
+import { IWSDKBootstrap } from './iwsdk/IWSDKBootstrap';
+// import { EnhancedControllerManager } from './iwsdk/EnhancedControllerManager';
 
 import loadManager from "./setup/setupLoadManager";
 import setupScene from "./setup/setupScene";
-import setupPortalClippingPlanes from "./setup/setupPortalClippingPlanes";
+// import setupPortalClippingPlanes from "./setup/setupPortalClippingPlanes";
 import setupVideoLayerManager from "./setup/setupVideoLayerManager";
 import { checkControllerAction } from "./controllers";
 

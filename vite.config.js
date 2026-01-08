@@ -1,9 +1,32 @@
-import { defineConfig } from 'vite';
-import basicSsl from '@vitejs/plugin-basic-ssl';
+import { NodeGlobalsPolyfillPlugin } from "@esbuild-plugins/node-globals-polyfill";
+import { NodeModulesPolyfillPlugin } from "@esbuild-plugins/node-modules-polyfill";
+import basicSsl from "@vitejs/plugin-basic-ssl";
 
-export default defineConfig({
+export default {
+  base: "",
+  define: {
+    // "process.env.MapboxAccessToken": JSON.stringify(process.env.MapboxAccessToken)
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      plugins: [
+        NodeGlobalsPolyfillPlugin({
+          process: true,
+          buffer: true
+        }),
+        NodeModulesPolyfillPlugin()
+      ]
+    }
+  },
   plugins: [
-    basicSsl(),
+    basicSsl({
+      /** name of certification */
+      name: 'test',
+      // /** custom trust domains */
+      // domains: ['*.custom.com'],
+      // /** custom certification directory */
+      // certDir: '/Users/.../.devServer/cert'
+    }),
   ],
   server: {
     https: true,
@@ -11,11 +34,29 @@ export default defineConfig({
     port: 5173
   },
   resolve: {
-    alias: {
-      '@iwsdk/core': '../immersive-web-sdk/packages/core/dist/index.js',
-      '@iwsdk/xr-input': '../immersive-web-sdk/packages/xr-input/dist/index.js',
-      '@iwsdk/locomotor': '../immersive-web-sdk/packages/locomotor/dist/index.js',
-      '@iwsdk/glxf': '../immersive-web-sdk/packages/glxf/dist/index.js'
-    }
+    alias: [
+      // {
+      //     find: "@", replacement: resolve(__dirname, "./src"),
+      // },
+      {
+          find: "@iwsdk/core", replacement: "../immersive-web-sdk/packages/core/dist"
+      },
+      {
+          find: "@iwsdk/xr-input", replacement: "../immersive-web-sdk/packages/xr-input/dist"
+      },
+      {
+          find: "@iwsdk/locomotor", replacement: "../immersive-web-sdk/packages/locomotor/dist"
+      },
+      {
+          find: "@iwsdk/glxf", replacement: "../immersive-web-sdk/packages/glxf/dist"
+      },
+      {
+        find: "./runtimeConfig", replacement: "./runtimeConfig.browser"
+      },
+      {
+        find: "util",
+        replacement: "rollup-plugin-node-polyfills/polyfills/util"
+      }
+    ]
   }
-});
+};
