@@ -266,8 +266,9 @@ setTimeout(function init () {
             }
 
             // IWSDK Integration - Step 4: Update IWSDK systems in render loop
+            // XRInputManager.update() requires (xrManager, delta, time) parameters
             if (iwsdkBootstrap) {
-                iwsdkBootstrap.update(delta);
+                iwsdkBootstrap.update(xr, delta, time);
             }
 
             updateScene(

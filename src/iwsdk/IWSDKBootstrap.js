@@ -3,7 +3,10 @@ import { XRInputManager } from '@iwsdk/xr-input';
 
 /**
  * IWSDK Bootstrap for WebXR Layers Start Template
- * Replaces manual WebXR setup with IWSDK's ECS architecture
+ * Integrates IWSDK's XRInputManager with Three.js WebXR setup
+ * 
+ * Note: XRInputManager uses Preact signals for reactivity, not EventEmitter.
+ * The update() method requires (xrManager, delta, time) parameters.
  */
 export class IWSDKBootstrap {
   constructor(scene, camera, renderer) {
@@ -15,8 +18,14 @@ export class IWSDKBootstrap {
     this.world = null;
     this.inputManager = null;
     
+    // Signal subscriptions for cleanup
+    this._signalUnsubscribers = [];
+    
     // System instances
     this.systems = new Map();
+    
+    // Event listeners for external communication
+    this._eventListeners = {};
     
     console.log('IWSDK Bootstrap initialized');
   }
@@ -36,11 +45,11 @@ export class IWSDKBootstrap {
       });
 
       // Initialize XR Input Management
+      // XRInputManager expects { camera, scene } with PerspectiveCamera
       console.log('Initializing XR Input Manager...');
       this.inputManager = new XRInputManager({
-        world: this.world,
-        scene: this.scene,
-        camera: this.camera
+        camera: this.camera,
+        scene: this.scene
       });
 
       // Register core systems
@@ -68,7 +77,7 @@ export class IWSDKBootstrap {
   }
 
   registerCoreSystems() {
-    // Input system setup
+    // Input system setup using signals (not events)
     this.setupInputSystem();
     
     // Video layer system (preserve existing functionality)
@@ -78,29 +87,42 @@ export class IWSDKBootstrap {
   }
 
   setupInputSystem() {
-    // Controller events
-    this.inputManager.on('controllerConnected', (controller) => {
-      console.log(`Controller connected: ${controller.hand}`);
-      this.emit('controllerConnected', controller);
-    });
-
-    this.inputManager.on('controllerDisconnected', (controller) => {
-      console.log(`Controller disconnected: ${controller.hand}`);
-      this.emit('controllerDisconnected', controller);
-    });
-
-    // Button events
-    this.inputManager.on('trigger', (event) => {
-      this.emit('trigger', event);
-    });
-
-    this.inputManager.on('squeeze', (event) => {
-      this.emit('squeeze', event);
-    });
-
-    this.inputManager.on('menu', (event) => {
-      this.emit('menu', event);
-    });
+    // XRInputManager uses Preact signals for reactivity, not EventEmitter.
+    // Subscribe to visual adapter signals to detect controller changes.
+    
+    if (!this.inputManager) return;
+    
+    const { visualAdapters } = this.inputManager;
+    
+    // Subscribe to left controller visual adapter changes
+    if (visualAdapters.left && typeof visualAdapters.left.subscribe === 'function') {
+      const unsubLeft = visualAdapters.left.subscribe((adapter) => {
+        if (adapter) {
+          console.log('Left controller connected via IWSDK');
+          this.emit('controllerConnected', { hand: 'left', adapter });
+        } else {
+          console.log('Left controller disconnected via IWSDK');
+          this.emit('controllerDisconnected', { hand: 'left' });
+        }
+      });
+      this._signalUnsubscribers.push(unsubLeft);
+    }
+    
+    // Subscribe to right controller visual adapter changes
+    if (visualAdapters.right && typeof visualAdapters.right.subscribe === 'function') {
+      const unsubRight = visualAdapters.right.subscribe((adapter) => {
+        if (adapter) {
+          console.log('Right controller connected via IWSDK');
+          this.emit('controllerConnected', { hand: 'right', adapter });
+        } else {
+          console.log('Right controller disconnected via IWSDK');
+          this.emit('controllerDisconnected', { hand: 'right' });
+        }
+      });
+      this._signalUnsubscribers.push(unsubRight);
+    }
+    
+    console.log('Input system setup with signal-based reactivity');
   }
 
   setupVideoLayerSystem() {
@@ -117,59 +139,89 @@ export class IWSDKBootstrap {
 
   // Event system for communication with existing code
   on(eventName, callback) {
-    if (!this._eventListeners) this._eventListeners = {};
     if (!this._eventListeners[eventName]) this._eventListeners[eventName] = [];
     this._eventListeners[eventName].push(callback);
   }
 
+  off(eventName, callback) {
+    if (this._eventListeners[eventName]) {
+      this._eventListeners[eventName] = this._eventListeners[eventName].filter(cb => cb !== callback);
+    }
+  }
+
   emit(eventName, data) {
-    if (this._eventListeners && this._eventListeners[eventName]) {
+    if (this._eventListeners[eventName]) {
       this._eventListeners[eventName].forEach(callback => callback(data));
     }
   }
 
-  update(deltaTime) {
+  /**
+   * Update IWSDK systems in the render loop
+   * @param {THREE.WebXRManager} xrManager - The Three.js WebXRManager (renderer.xr)
+   * @param {number} delta - Delta time since last frame
+   * @param {number} time - Total elapsed time
+   */
+  update(xrManager, delta, time) {
     if (this.world) {
-      this.world.update(deltaTime);
+      this.world.update(delta);
     }
     
-    if (this.inputManager) {
-      this.inputManager.update(deltaTime);
+    // XRInputManager.update() expects (xrManager, delta, time)
+    // xrManager must be a Three.js WebXRManager with getSession(), getReferenceSpace(), getFrame()
+    if (this.inputManager && xrManager) {
+      this.inputManager.update(xrManager, delta, time);
     }
     
     // Update custom systems
     this.systems.forEach(system => {
       if (system.update) {
-        system.update(deltaTime);
+        system.update(delta);
       }
     });
   }
 
-  // Enhanced controller access
-  getControllers() {
+  // Enhanced controller access via XRInputManager
+  getGamepads() {
     if (this.inputManager) {
-      return this.inputManager.getControllers();
+      return this.inputManager.gamepads;
     }
-    return {};
+    return { left: undefined, right: undefined };
   }
 
-  // Session management integration
-  onSessionStarted(session) {
-    console.log('XR Session started, integrating with IWSDK');
+  getVisualAdapters() {
     if (this.inputManager) {
-      this.inputManager.onSessionStarted(session);
+      return this.inputManager.visualAdapters;
     }
+    return null;
+  }
+
+  getXROrigin() {
+    if (this.inputManager) {
+      return this.inputManager.xrOrigin;
+    }
+    return null;
+  }
+
+  // Session management - XRInputManager handles this internally via update()
+  // These methods are kept for external notification purposes
+  onSessionStarted(session) {
+    console.log('XR Session started, IWSDK will integrate via update loop');
+    // XRInputManager detects session internally in update() via xrManager.getSession()
   }
 
   onSessionEnded() {
     console.log('XR Session ended');
-    if (this.inputManager) {
-      this.inputManager.onSessionEnded();
-    }
+    // XRInputManager handles session end internally when getSession() returns null
   }
 
   dispose() {
     console.log('Disposing IWSDK Bootstrap');
+    
+    // Unsubscribe from signals
+    this._signalUnsubscribers.forEach(unsub => {
+      if (typeof unsub === 'function') unsub();
+    });
+    this._signalUnsubscribers = [];
     
     // Dispose systems
     this.systems.forEach(system => {
@@ -179,10 +231,8 @@ export class IWSDKBootstrap {
     });
     this.systems.clear();
     
-    // Dispose IWSDK components
-    if (this.inputManager) {
-      this.inputManager.dispose();
-    }
+    // Note: XRInputManager doesn't have a dispose() method
+    this.inputManager = null;
     
     if (this.world) {
       this.world.dispose();
