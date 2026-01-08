@@ -1,12 +1,16 @@
-import { World } from '@iwsdk/core';
 import { XRInputManager } from '@iwsdk/xr-input';
 
 /**
  * IWSDK Bootstrap for WebXR Layers Start Template
- * Integrates IWSDK's XRInputManager with Three.js WebXR setup
+ * Integrates IWSDK's XRInputManager with an existing Three.js WebXR setup
  * 
  * Note: XRInputManager uses Preact signals for reactivity, not EventEmitter.
  * The update() method requires (xrManager, delta, time) parameters.
+ * 
+ * We don't use @iwsdk/core's World class here because:
+ * - World.create() is designed to own the entire rendering pipeline
+ * - Our main.js already has its own Three.js renderer/scene/camera setup
+ * - We only need XRInputManager for controller/hand input integration
  */
 export class IWSDKBootstrap {
   constructor(scene, camera, renderer) {
@@ -14,8 +18,7 @@ export class IWSDKBootstrap {
     this.camera = camera;
     this.renderer = renderer;
     
-    // IWSDK World instance
-    this.world = null;
+    // IWSDK XRInputManager instance
     this.inputManager = null;
     
     // Signal subscriptions for cleanup
@@ -32,18 +35,6 @@ export class IWSDKBootstrap {
 
   async initialize() {
     try {
-      console.log('Initializing IWSDK World...');
-      
-      // Create IWSDK World with Three.js integration
-      this.world = new World({
-        scene: this.scene,
-        camera: this.camera,
-        renderer: this.renderer,
-        enablePhysics: false, // Start simple
-        enableAudio: true,
-        enableLocomotion: false // We'll add this later
-      });
-
       // Initialize XR Input Management
       // XRInputManager expects { camera, scene } with PerspectiveCamera
       console.log('Initializing XR Input Manager...');
@@ -54,16 +45,12 @@ export class IWSDKBootstrap {
 
       // Register core systems
       this.registerCoreSystems();
-
-      // Start the world
-      await this.world.start();
       
       console.log('IWSDK Bootstrap initialized successfully');
       
       // Expose for debugging
       if (typeof window !== 'undefined') {
         window.iwsdk = {
-          world: this.world,
           inputManager: this.inputManager,
           systems: this.systems
         };
@@ -162,10 +149,6 @@ export class IWSDKBootstrap {
    * @param {number} time - Total elapsed time
    */
   update(xrManager, delta, time) {
-    if (this.world) {
-      this.world.update(delta);
-    }
-    
     // XRInputManager.update() expects (xrManager, delta, time)
     // xrManager must be a Three.js WebXRManager with getSession(), getReferenceSpace(), getFrame()
     if (this.inputManager && xrManager) {
@@ -233,10 +216,6 @@ export class IWSDKBootstrap {
     
     // Note: XRInputManager doesn't have a dispose() method
     this.inputManager = null;
-    
-    if (this.world) {
-      this.world.dispose();
-    }
     
     // Clear event listeners
     this._eventListeners = {};
