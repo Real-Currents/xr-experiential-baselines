@@ -1,21 +1,20 @@
 import * as THREE from "three";
 
 /**
- * Creates a dark void environment with cyan Euclidean grid lines
- * on the floor and surrounding walls.
+ * Cyan Euclidean grid (floor + walls). For immersive-ar, leave background null so passthrough
+ * is visible; an opaque scene.background would hide the camera feed.
  */
 export default function setupGridEnvironment(scene) {
     const gridColor = 0x00ffff;
     const gridSize = 20;
     const gridDivisions = 20;
 
-    // Dark background
-    scene.background = new THREE.Color(0x050505);
+    scene.background = null;
 
     // Floor grid
     const floorGrid = new THREE.GridHelper(gridSize, gridDivisions, gridColor, gridColor);
-    floorGrid.position.y = -1.0;
-    floorGrid.material.opacity = 0.3;
+    floorGrid.position.y = -1.5;
+    floorGrid.material.opacity = 0.45;
     floorGrid.material.transparent = true;
     scene.add(floorGrid);
 
@@ -24,7 +23,7 @@ export default function setupGridEnvironment(scene) {
     backWall.rotation.x = Math.PI / 2;
     backWall.position.z = -gridSize / 2;
     backWall.position.y = gridSize / 2 - 1.0;
-    backWall.material.opacity = 0.15;
+    backWall.material.opacity = 0.25;
     backWall.material.transparent = true;
     scene.add(backWall);
 
@@ -33,7 +32,7 @@ export default function setupGridEnvironment(scene) {
     leftWall.rotation.z = Math.PI / 2;
     leftWall.position.x = -gridSize / 2;
     leftWall.position.y = gridSize / 2 - 1.0;
-    leftWall.material.opacity = 0.1;
+    leftWall.material.opacity = 0.2;
     leftWall.material.transparent = true;
     scene.add(leftWall);
 
@@ -42,7 +41,7 @@ export default function setupGridEnvironment(scene) {
     rightWall.rotation.z = Math.PI / 2;
     rightWall.position.x = gridSize / 2;
     rightWall.position.y = gridSize / 2 - 1.0;
-    rightWall.material.opacity = 0.1;
+    rightWall.material.opacity = 0.2;
     rightWall.material.transparent = true;
     scene.add(rightWall);
 

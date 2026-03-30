@@ -144,8 +144,7 @@ export default function setupVideoLayerManager (
                     space: refSpace,
                     transform: new XRRigidTransform(
                         {x: 0, y: (videoHeight * videoReducer) / 2, z: videoDepthZ},
-                        {},
-                        {}
+                        {x: 0, y: 0, z: 0, w: 1}
                     )
                 }
             );

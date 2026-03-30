@@ -1,6 +1,12 @@
 import { NodeGlobalsPolyfillPlugin } from "@esbuild-plugins/node-globals-polyfill";
 import { NodeModulesPolyfillPlugin } from "@esbuild-plugins/node-modules-polyfill";
 import basicSsl from "@vitejs/plugin-basic-ssl";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const verge3dRoot = resolve(__dirname, "public/libs/verge3d");
+const jsmRoot = resolve(__dirname, "public/libs/jsm");
 
 export default {
     base: "",
@@ -20,6 +26,16 @@ export default {
     },
     resolve: {
         alias: [
+            // Import maps in public/*.html are not applied during Vite's dep scan;
+            // mirror webxr_vr_layers.v3d.html so bare "v3d" / "v3d/addons/*" resolve.
+            {
+                find: /^v3d\/addons\/(.*)$/,
+                replacement: `${jsmRoot}/$1`
+            },
+            {
+                find: "v3d",
+                replacement: resolve(verge3dRoot, "build/v3d.module.js")
+            },
             // {
             //     find: "@", replacement: resolve(__dirname, "./src"),
             // },
