@@ -177,11 +177,11 @@ setTimeout(function init () {
         // Grid environment: dark void with cyan Euclidean grid
         setupGridEnvironment(scene);
 
+        const updateScene = await setupScene(scene, camera, controllers, player, videoLayerManager);
+
         // Subtitle panel: head-locked with smooth-follow physics
         subtitlePanel = createSubtitlePanel("Welcome...");
         subtitlePanel.initSubtitleLayer(scene);
-
-        const updateScene = await setupScene(scene, camera, controllers, player, videoLayerManager);
 
         renderer.setAnimationLoop(function render (t, frame ) {
 
