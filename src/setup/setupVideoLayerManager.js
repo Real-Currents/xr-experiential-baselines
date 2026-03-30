@@ -50,7 +50,12 @@ export default function setupVideoLayerManager (
 
     let initialized = false;
 
-    function initVideoLayer (withWebXRLayer = false, renderer = null, scene = null, session = null, refSpace = null) {
+    /** World-space offset W for the video XRQuadLayer (same values as initial XRRigidTransform position). */
+    let videoQuadLayerBasePosition = { x: 0, y: 0, z: videoDepthZ };
+
+    function initVideoLayer (withWebXRLayer = false, renderer = null, scene = null, session = null, refSpace = null, webGLParent = null) {
+
+        const parentForWebGL = webGLParent || scene;
 
         if (!withWebXRLayer || session === null) {
 
@@ -112,7 +117,7 @@ export default function setupVideoLayerManager (
 
             console.log("Add video layer using WebGL plane geometry");
 
-            scene.add(webGLVideo);
+            parentForWebGL.add(webGLVideo);
 
             initialized = true;
 
@@ -130,6 +135,9 @@ export default function setupVideoLayerManager (
             const videoHeight = 2208;
             const videoReducer = 0.00090579710;
 
+            const quadY = (videoHeight * videoReducer) / 2;
+            videoQuadLayerBasePosition = { x: 0, y: quadY, z: videoDepthZ };
+
             // Create background EQR video layer.
             const mediaBinding = new XRMediaBinding(session);
 
@@ -143,8 +151,8 @@ export default function setupVideoLayerManager (
                     height: videoHeight * videoReducer,
                     space: refSpace,
                     transform: new XRRigidTransform(
-                        {x: 0, y: (videoHeight * videoReducer) / 2, z: videoDepthZ},
-                        {x: 0, y: 0, z: 0, w: 1}
+                        { x: 0, y: quadY, z: videoDepthZ },
+                        { x: 0, y: 0, z: 0, w: 1 }
                     )
                 }
             );
@@ -189,7 +197,16 @@ export default function setupVideoLayerManager (
         if (!withWebXRLayer) {
 
             console.log("Remove video layer from WebGL plane geometry");
-            scene.remove(webGLVideo);
+            if (webGLVideo.parent) {
+
+                webGLVideo.parent.remove(webGLVideo);
+
+            } else if (scene) {
+
+                scene.remove(webGLVideo);
+
+            }
+
         }
 
         if (textureUpdateInterval > 0) {
@@ -206,7 +223,12 @@ export default function setupVideoLayerManager (
                     initVideoLayer,
                     clearVideoLayer,
                     webGLVideo,
-                    webXRLayerVideo
+                    webXRLayerVideo,
+                    get videoQuadLayerBasePosition () {
+
+                        return videoQuadLayerBasePosition;
+
+                    }
                 },
                 'videoLayerInitialized',
                 {

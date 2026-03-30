@@ -16,6 +16,12 @@ import setupVideoLayerManager from "./setup/setupVideoLayerManager";
 import setupGridEnvironment from "./setup/setupGridEnvironment";
 import createSubtitlePanel from "./ui/SubtitlePanel";
 import { checkControllerAction } from "./controllers";
+import {
+    getViewerMidpoint,
+    updateStationaryGroup,
+    updateVideoQuadLayerPosition,
+    isStationaryGridEnabled
+} from "./xr/stationaryView";
 
 let currentSession = null;
 let initXRLayers = true;
@@ -58,7 +64,8 @@ setTimeout(function init () {
     // renderer.outputEncoding = THREE.LinearEncoding;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.xr.enabled = true;
-    renderer.xr.setReferenceSpaceType('local');
+    // Align with XRQuadLayer space (local-floor) for consistent viewer midpoint V
+    renderer.xr.setReferenceSpaceType('local-floor');
 
     container.appendChild( renderer.domElement );
 
@@ -82,6 +89,12 @@ setTimeout(function init () {
     player = new THREE.Group();
 
     const scene = new THREE.Scene();
+    /** Grid + WebGL stereo video only; position = viewer translation V each frame when stationary mode is on. */
+    const stationaryContent = new THREE.Group();
+    scene.add(stationaryContent);
+
+    const stationaryGridEnabled = isStationaryGridEnabled();
+
     const controllerModelFactory = new XRControllerModelFactory();
     const controllers = {
         left: null,
@@ -172,10 +185,10 @@ setTimeout(function init () {
 
         currentSession = null;
 
-        videoLayerManager.initVideoLayer(false, renderer, scene, currentSession);
+        videoLayerManager.initVideoLayer(false, renderer, scene, currentSession, null, stationaryContent);
 
-        // Grid environment: dark void with cyan Euclidean grid
-        setupGridEnvironment(scene);
+        // Grid environment: dark void with cyan Euclidean grid (under stationaryContent with video mesh)
+        setupGridEnvironment(scene, stationaryContent);
 
         const updateScene = await setupScene(scene, camera, controllers, player, videoLayerManager);
 
@@ -236,6 +249,20 @@ setTimeout(function init () {
             
 
             waiting_for_confirmation = checkControllerAction(controllers, data, currentSession, waiting_for_confirmation);
+
+            const stationaryActive = stationaryGridEnabled && xr.isPresenting && currentSession !== null;
+            const viewerMid = getViewerMidpoint(renderer, frame);
+            updateStationaryGroup(stationaryContent, viewerMid, stationaryActive);
+
+            if (stationaryActive && xrLayerQuadVideo !== null && viewerMid) {
+
+                updateVideoQuadLayerPosition(
+                    xrLayerQuadVideo,
+                    videoLayerManager.videoQuadLayerBasePosition,
+                    viewerMid
+                );
+
+            }
 
             stats.begin();
 
@@ -462,7 +489,7 @@ setTimeout(function init () {
             console.log("Clear video layer");
             config.videoLayerManager.clearVideoLayer(true, renderer, scene, session);
             console.log("Init video layer");
-            config.videoLayerManager.initVideoLayer(false, renderer, scene, session);
+            config.videoLayerManager.initVideoLayer(false, renderer, scene, session, null, stationaryContent);
         }
     }
 
