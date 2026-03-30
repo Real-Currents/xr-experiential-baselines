@@ -9,29 +9,27 @@ import { XRControllerModelFactory } from "three/addons/webxr/XRControllerModelFa
 import { HTMLMesh } from "three/addons/interactive/HTMLMesh";
 import Stats from "three/addons/libs/stats.module";
 
-// IWSDK Integration - Step 1: Add imports
-import { IWSDKBootstrap } from './iwsdk/IWSDKBootstrap.js';
-import { EnhancedControllerManager } from './iwsdk/EnhancedControllerManager.js';
-
 import loadManager from "./setup/setupLoadManager";
 import setupScene from "./setup/setupScene";
 import setupPortalClippingPlanes from "./setup/setupPortalClippingPlanes";
 import setupVideoLayerManager from "./setup/setupVideoLayerManager";
+import setupGridEnvironment from "./setup/setupGridEnvironment";
+import createSubtitlePanel from "./ui/SubtitlePanel";
 import { checkControllerAction } from "./controllers";
 
 let currentSession = null;
 let initXRLayers = true;
 let waiting_for_confirmation = false;
 
-// IWSDK instances
-let iwsdkBootstrap = null;
-let enhancedControllerManager = null;
+/** Persisted across animation frames (must not be redeclared inside render). */
+let xrLayerGui = null;
+let xrLayerQuadVideo = null;
 
 setTimeout(function init () {
 
-    console.log("Initiate WebXR Layers scene with IWSDK integration!");
+    console.log("Initiate WebXR Layers scene (passthrough-first: immersive-ar + optional layers).");
 
-    let camera, controls, renderer, player, video, videoLayerManager;
+    let camera, controls, renderer, player, video, videoLayerManager, subtitlePanel;
 
     const body = document.body;
 
@@ -49,9 +47,15 @@ setTimeout(function init () {
     };
     container.style = `display: block; background-color: #000; max-width: ${previewWindow.width}px; max-height: ${previewWindow.height}px; overflow: hidden;`;
 
-    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+    // alpha: true + transparent clear so immersive-ar passthrough shows behind the scene
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
     renderer.setPixelRatio( window.devicePixelRatio );
     renderer.setSize( previewWindow.width, previewWindow.height);
+    renderer.setClearColor( 0x000000, 0 );
+    // renderer.setSize( previewWindow.innerWidth, previewWindow.innerHeight );
+    // These are deprecated but still work
+    // renderer.outputEncoding = THREE.sRGBEncoding;
+    // renderer.outputEncoding = THREE.LinearEncoding;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.xr.enabled = true;
     renderer.xr.setReferenceSpaceType('local');
@@ -73,6 +77,7 @@ setTimeout(function init () {
 
     controls = new OrbitControls(camera, container);
     controls.target.set(0, 0.0, -0.5);
+    // controls.update();
 
     player = new THREE.Group();
 
@@ -82,9 +87,6 @@ setTimeout(function init () {
         left: null,
         right: null,
     };
-
-    // IWSDK Integration - Step 2: Replace manual controller setup
-    // (We'll keep the existing approach for now and enhance it gradually)
 
     for (let i = 0; i < 2; i++) {
         const raySpace = renderer.xr.getController(i);
@@ -104,23 +106,21 @@ setTimeout(function init () {
                 gripSpace,
                 mesh
             };
-
-            // IWSDK Enhancement: Notify IWSDK systems of controller connection
-            console.log(`Controller connected: ${handedness}, integrating with IWSDK...`);
         });
 
         gripSpace.addEventListener('disconnected', (e) => {
             raySpace.visible = false;
             gripSpace.visible = false;
+            // const handedness = e.data.handedness;
+            // controllers[handedness] = null;
             for (const h in controllers) {
                 if (controllers[h] !== null) controllers[h] = null;
             }
-
-            // IWSDK Enhancement: Notify IWSDK systems of controller disconnection
-            console.log('Controller disconnected, updating IWSDK...');
         });
 
         player.add(raySpace, gripSpace);
+        // raySpace.visible = false;
+        // gripSpace.visible = false;
     }
 
     // Setup Stats
@@ -132,6 +132,9 @@ setTimeout(function init () {
     document.body.appendChild(stats.dom);
 
     const statsMesh = new HTMLMesh( stats.dom );
+    // statsMesh.position.x = -1.5;
+    // statsMesh.position.y = 0.5;
+    // statsMesh.position.z = -2.0;
     statsMesh.position.set(-1.5, 0.5, -2.0);
     statsMesh.rotation.y = Math.PI / 4;
     statsMesh.scale.setScalar(4);
@@ -139,7 +142,19 @@ setTimeout(function init () {
     statsMesh.material.transparent = false;
 
     // video
+
+    const videoWidth = 2064;
+    const videoHeight = 2208;
+    const videoReducer = 0.090579710;
+
     video = document.getElementById( 'video' );
+    // document.body.appendChild(video);
+    // video.loop = true;
+    // video.src = 'assets/videos/Lake_Champlain.webm';
+    // video.src = 'assets/videos/Lake_Champlain.mp4';
+    // video.width = previewWindow.width;
+    // video.height = previewWindow.height;
+    // video.play();
 
     container.addEventListener( 'click', function () {
         video.play();
@@ -152,21 +167,19 @@ setTimeout(function init () {
     async function setupEnvironment (renderer, scene, videoLayerManager) {
 
         scene.add(player);
+
         scene.add(statsMesh);
 
         currentSession = null;
+
         videoLayerManager.initVideoLayer(false, renderer, scene, currentSession);
 
-        // IWSDK Integration - Step 3: Initialize IWSDK systems
-        try {
-            console.log('Initializing IWSDK Bootstrap...');
-            iwsdkBootstrap = new IWSDKBootstrap(scene, camera, renderer);
-            await iwsdkBootstrap.initialize();
-            console.log('IWSDK Bootstrap initialized successfully');
-        } catch (error) {
-            console.error('Failed to initialize IWSDK Bootstrap:', error);
-            console.log('Continuing with traditional WebXR setup...');
-        }
+        // Grid environment: dark void with cyan Euclidean grid
+        setupGridEnvironment(scene);
+
+        // Subtitle panel: head-locked with smooth-follow physics
+        subtitlePanel = createSubtitlePanel("Welcome...");
+        subtitlePanel.initSubtitleLayer(scene);
 
         const updateScene = await setupScene(scene, camera, controllers, player, videoLayerManager);
 
@@ -179,31 +192,54 @@ setTimeout(function init () {
             const xr = renderer.xr;
             const gl = renderer.getContext();
 
-            // Layer management logic (unchanged)
+            // Three.js r170+ automatically inherits and enforces layer masks from the 
+            // main camera to the XR cameras, and there's no way to override it after the 
+            // fact because it happens in the WebXRManager's internal update cycle.
+            // Change the main camera's layers based on whether an immersive session is active
             if (!xr.isPresenting) {
-                camera.layers.mask = 3;
+                // Desktop / pre-XR: enable layer 1 for 2D stereo video preview
+                camera.layers.mask = 3; // 0b011 = layers 0 and 1
             } else {
-                camera.layers.mask = 1;
+                // immersive-ar / immersive-vr: layer 0 only on main camera; per-eye layers handled by WebXRManager
+                camera.layers.mask = 1; // 0b001 = layer 0 only
             }
 
+            // ... instead of trying to fix the XR cameras directly, which get overwritten (i.e., like so...)
             if (currentSession && xr.isPresenting) {
-                const xrCamera = xr.getCamera(camera);
+    
+                const xrCamera = xr.getCamera(camera); // gets XR camera array
+    
                 if (xrCamera.cameras.length > 1) {
-                    xrCamera.cameras[0].layers.mask = 3;
-                    xrCamera.cameras[1].layers.mask = 5;
+    
+                    /*!
+                     * The mask property is a number where each bit represents whether that layer is enabled:
+                     * camera.layers.mask = 1;  // Only layer 0 enabled (binary: 0001)
+                     * camera.layers.mask = 2;  // Only layer 1 enabled (binary: 0010)
+                     * camera.layers.mask = 3;  // Layers 0 and 1 enabled (binary: 0011)
+                     * camera.layers.mask = 5;  // Layers 0 and 2 enabled (binary: 0101)
+                     * camera.layers.mask = 7;  // Layers 0, 1, and 2 enabled (binary: 0111)
+                     */
+    
+                    // Left eye: only layer 1
+                    xrCamera.cameras[0].layers.mask = 3;  // 0b0011 = layers 0 and 1
+    
+                    // Right eye: only layer 2
+                    xrCamera.cameras[1].layers.mask = 5;  // 0b0101 = layers 0 and 2
                 }
+    
+                // console.log("cameras:", [
+                //     ...xrCamera.cameras
+                // ]);
             }
+            // This is actually a pretty significant API change that wasn't well-documented in the migration guide. 
+            // The old pattern (manually configuring XR camera layers) was replaced with an automatic inheritance system.
+            
 
             waiting_for_confirmation = checkControllerAction(controllers, data, currentSession, waiting_for_confirmation);
 
             stats.begin();
 
-            // XR Layers logic (unchanged)
-            let guiLayer,
-                equirectLayer,
-                quadLayerPlain,
-                quadLayerMips,
-                quadLayerVideo;
+            // const clippingPlanes  = setupPortalClippingPlanes(renderer, camera);
 
             if (
                 currentSession !== null
@@ -219,13 +255,16 @@ setTimeout(function init () {
 
                 currentSession.hasMediaLayer = true;
 
+                console.log("Make gl context XR compatible: ", gl.makeXRCompatible);
+
                 gl.makeXRCompatible().then(() => {
 
-                    const glBinding = xr.getBinding();
+                    const glBinding = xr.getBinding(); // returns XRWebGLBinding
 
-                    currentSession.requestReferenceSpace('local-floor').then((refSpace) => {
+                    return currentSession.requestReferenceSpace('local-floor').then((refSpace) => {
 
-                     guiLayer = glBinding.createQuadLayer({
+                     // Create GUI layer.
+                     xrLayerGui = glBinding.createQuadLayer({
                         width: statsMesh.geometry.parameters.width,
                         height: statsMesh.geometry.parameters.height,
                         viewPixelWidth: statsMesh.material.map.image.width,
@@ -234,41 +273,48 @@ setTimeout(function init () {
                         transform: new XRRigidTransform(statsMesh.position, statsMesh.quaternion)
                      });
                      
-                     quadLayerVideo = videoLayerManager.initVideoLayer(true, renderer, scene, currentSession, refSpace);
+                     xrLayerQuadVideo = videoLayerManager.initVideoLayer(true, renderer, scene, currentSession, refSpace);
 
                      videoLayerManager.videoLayerInitialized = true;
 
+                     const existing = currentSession.renderState.layers;
+                     const baseProjection = existing && existing.length > 0 ? existing[0] : null;
+
                      currentSession.updateRenderState({
-                        layers: (!!currentSession.renderState.layers.length > 0) ? [
-                            quadLayerVideo,
-                            guiLayer,
-                            currentSession.renderState.layers[0]
+                        layers: baseProjection ? [
+                            xrLayerQuadVideo,
+                            xrLayerGui,
+                            baseProjection
                         ] : [
-                            quadLayerVideo,
-                            guiLayer
+                            xrLayerQuadVideo,
+                            xrLayerGui
                         ]
                      });
 
                   });
+               }).catch((err) => {
+                    console.error("WebXR layer stack setup failed:", err);
+                    if (currentSession) delete currentSession.hasMediaLayer;
+                    xrLayerGui = null;
+                    xrLayerQuadVideo = null;
                });
 
             }
 
-            if (currentSession !== null && !!guiLayer && (guiLayer.needsRedraw || guiLayer.needsUpdate)) {
+            if (currentSession !== null && xrLayerGui !== null && (xrLayerGui.needsRedraw || xrLayerGui.needsUpdate)) {
 
-               const glayer = xr.getBinding().getSubImage(guiLayer, frame);
+               const glayer = xr.getBinding().getSubImage(xrLayerGui, frame);
                renderer.state.bindTexture(gl.TEXTURE_2D, glayer.colorTexture);
                gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
                const canvas = statsMesh.material.map.image;
                gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-               guiLayer.needsUpdate = false;
+               xrLayerGui.needsUpdate = false;
 
             }
 
-            // IWSDK Integration - Step 4: Update IWSDK systems in render loop
-            if (iwsdkBootstrap) {
-                iwsdkBootstrap.update(delta);
-            }
+            // if (currentSession !== null) renderer.clippingPlanes =  [
+            //     ...clippingPlanes
+            // ];
 
             updateScene(
                 currentSession,
@@ -276,84 +322,105 @@ setTimeout(function init () {
                 time,
                 (data.hasOwnProperty("action")) ? data : null,
                 null
+                //, [
+                //     ...clippingPlanes
+                // ]
             );
+
+            // Update subtitle panel smooth-follow position
+            // In XR mode, use the XR camera for accurate head tracking
+            const activeCamera = (currentSession && xr.isPresenting)
+                ? xr.getCamera(camera)
+                : camera;
+            subtitlePanel.update(activeCamera);
 
             renderer.render(scene, camera);
 
             stats.end();
 
             statsMesh.material.map.update();
+            // if (!!guiLayer) guiLayer.needsUpdate = true;
         });
 
         return renderer;
     }
 
-    // Session management (enhanced with IWSDK integration)
+    /**
+     * Passthrough-first: only immersive-ar (no silent fallback to immersive-vr).
+     * 1) immersive-ar + layers + local-floor
+     * 2) immersive-ar + local-floor (layers not granted by UA)
+     * Throws if immersive-ar cannot be created.
+     */
     async function getXRSession (xr) {
 
         console.log("xr", `${JSON.stringify(xr)}`);
 
         let session = null;
 
-        const useXRLayers =  initXRLayers && (typeof XRWebGLBinding !== 'undefined' && 'createProjectionLayer' in XRWebGLBinding.prototype);
+        const wantLayers = initXRLayers && (typeof XRWebGLBinding !== 'undefined' && 'createProjectionLayer' in XRWebGLBinding.prototype);
         try {
-            if (!useXRLayers) {
-                session = await (xr.requestSession("immersive-vr", {
-                    optionalFeatures: [
-                        "local-floor"
-                    ]
-                }));
+            if (wantLayers) {
+                try {
+                    session = await xr.requestSession("immersive-ar", {
+                        optionalFeatures: [
+                            "layers",
+                            "local-floor"
+                        ]
+                    });
+                } catch (e1) {
+                    console.warn("[WebXR] immersive-ar + layers not available; trying AR without layers:", e1);
+                    session = await xr.requestSession("immersive-ar", {
+                        optionalFeatures: [
+                            "local-floor"
+                        ]
+                    });
+                }
             } else {
-                session = await (xr.requestSession("immersive-ar", {
+                session = await xr.requestSession("immersive-ar", {
                     optionalFeatures: [
-                        "layers"
-                    ],
-                    requiredFeatures: [
                         "local-floor"
                     ]
-                }));
+                });
             }
         } catch (e) {
-            session = await (xr.requestSession("immersive-vr", {
-                optionalFeatures: [
-                    "local-floor"
-                ]
-            }));
-        } finally {
+            console.error("[WebXR] immersive-ar is not available:", e);
+            throw new Error(
+                "immersive-ar (passthrough) is not available. Use a WebXR AR-capable headset and browser (e.g. Meta Quest Browser)."
+            );
+        }
 
-            previewWindow.width = window.innerWidth;
-            previewWindow.height = window.innerHeight;
+        previewWindow.width = window.innerWidth;
+        previewWindow.height = window.innerHeight;
 
-            renderer.setSize(previewWindow.width, previewWindow.height);
+        renderer.setSize(previewWindow.width, previewWindow.height);
 
-            camera.aspect = previewWindow.width / previewWindow.height;
-            camera.updateProjectionMatrix();
+        camera.aspect = previewWindow.width / previewWindow.height;
+        camera.updateProjectionMatrix();
 
-            session.requestReferenceSpace("local").then((xrReferenceSpace) => {
-                session.requestAnimationFrame((time, xrFrame) => {
-                    const viewer = xrFrame.getViewerPose(xrReferenceSpace);
+        session.requestReferenceSpace("local").then((xrReferenceSpace) => {
+            session.requestAnimationFrame((time, xrFrame) => {
+                const viewer = xrFrame.getViewerPose(xrReferenceSpace);
 
-                    const tick = time % 3333;
+                const tick = time % 3333;
 
-                    if (tick < 1) try {
-                        for (const xrView of viewer.views) {
-                            const xrViewport = XRWebGLLayer.getViewport(xrView);
-                            console.log({
-                                xrReferenceSpace,
-                                xrView,
-                                xrViewport
-                            });
-                        }
-                    } catch (e) {
+                if (tick < 1) try {
+                    for (const xrView of viewer.views) {
+                        const xrViewport = XRWebGLLayer.getViewport(xrView);
                         console.log({
-                            error: e
+                            xrReferenceSpace,
+                            xrView,
+                            xrViewport
                         });
                     }
-                });
+                } catch (e) {
+                    console.log({
+                        error: e
+                    });
+                }
             });
+        });
 
-            return session;
-        }
+        return session;
     }
 
     async function onSessionStarted (session, config) {
@@ -366,16 +433,14 @@ setTimeout(function init () {
         currentSession["config"] = config;
         currentSession.addEventListener("end", onSessionEnded);
 
-        // IWSDK Integration - Step 5: Notify IWSDK of session start
-        if (iwsdkBootstrap) {
-            iwsdkBootstrap.onSessionStarted(session);
-        }
-
-        if (!!config && config.useXRLayers && !!config.videoLayerManager) {
+        if (!!config && config.useXRLayers && !!config.videoLayerManager) { // && config.videoLayerManager.videoLayerInitialized) {
+            // Transition to WebXRLayer
             config.videoLayerManager.clearVideoLayer(!config.useXRLayers, renderer, scene, session);
+            // config.videoLayerManager.initVideoLayer(config.useXRLayers, renderer, scene, session);
+            // config.videoLayerManager.videoLayerInitialized = true;
         }
 
-        console.log("Init video layer: ", config.videoLayerManager.videoLayerInitialized)
+        console.log("Init video layer:", config.videoLayerManager.videoLayerInitialized, "useXRLayers:", config.useXRLayers);
 
         video.play();
     }
@@ -386,15 +451,14 @@ setTimeout(function init () {
 
         console.log("Ended WebXR session!", session, config);
 
+        xrLayerGui = null;
+        xrLayerQuadVideo = null;
+
         currentSession.removeEventListener("end", onSessionEnded);
         currentSession = null;
 
-        // IWSDK Integration - Step 6: Notify IWSDK of session end
-        if (iwsdkBootstrap) {
-            iwsdkBootstrap.onSessionEnded();
-        }
-
         if (videoLayerManager.videoLayerInitialized && !!config.videoLayerManager) {
+            // Transition to WebGLLayer
             console.log("Clear video layer");
             config.videoLayerManager.clearVideoLayer(true, renderer, scene, session);
             console.log("Init video layer");
@@ -454,16 +518,32 @@ setTimeout(function init () {
 
         }
 
-        const useXRLayers =  initXRLayers && (typeof XRWebGLBinding !== 'undefined' && 'createProjectionLayer' in XRWebGLBinding.prototype);
+        let session;
+        try {
+            session = await getXRSession(navigator.xr);
+        } catch (err) {
+            console.error(err);
+            alert(err.message || String(err));
+            return;
+        }
 
-        const session = await getXRSession(navigator.xr);
+        console.log("[WebXR] session.mode:", session.mode, "enabledFeatures:", session.enabledFeatures);
+
+        const layersFeatureGranted = session.enabledFeatures?.includes("layers") ?? false;
+        const useXRLayers = initXRLayers
+            && layersFeatureGranted
+            && (typeof XRWebGLBinding !== 'undefined' && 'createProjectionLayer' in XRWebGLBinding.prototype);
 
         await onSessionStarted(session, { useXRLayers, videoLayerManager });
 
+        // Set camera position
         camera.position.y = 0;
+        // camera.position.z = 0;
+
         player.position.y = camera.position.y;
         player.position.z = camera.position.z;
 
+        // container.style = `display: block; color: #FFF; font-size: 24px; text-align: center; background-color: #000; height: 100vh; max-width: ${previewWindow.width}px; max-height: ${previewWindow.height}px; overflow: hidden;`;
         xr_button.innerHTML = "Reload";
         xr_button.onclick = function () {
             xr_button.disabled = true;
@@ -479,18 +559,24 @@ setTimeout(function init () {
     delete xr_button.disabled;
 
     canvas.addEventListener("webglcontextlost", (event) => {
+        /* The context has been lost but can be restored */
         event.canceled = true;
+
         console.log("webglcontextlost");
     });
 
+    /* When the GL context is reconnected, reload the resources for the
+       current scene. */
     canvas.addEventListener("webglcontextrestored", (event) => {
+        // ... loadSceneResources(currentScene);
         setupEnvironment(renderer, scene, videoLayerManager);
+
         console.log("webglcontextrestored");
     });
 
     setupEnvironment(renderer, scene, videoLayerManager)
         .then((renderer) => {
-            console.log("WebXR has been initialized with IWSDK integration: ", renderer);
+            console.log("WebXR has been initialized with renderer: ", renderer);
         });
 
 }, 533);
