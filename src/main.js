@@ -22,14 +22,12 @@ import {
     updateVideoQuadLayerPosition,
     isStationaryGridEnabled
 } from "./xr/stationaryView";
-import { meshPositionToWebXRLayersQuadPosition } from "./xr/meshPositionToWebXRLayersQuadPosition";
 
 let currentSession = null;
 let initXRLayers = true;
 let waiting_for_confirmation = false;
 
 /** Persisted across animation frames (must not be redeclared inside render). */
-let xrLayerGui = null;
 let xrLayerQuadVideo = null;
 
 setTimeout(function init () {
@@ -160,25 +158,6 @@ setTimeout(function init () {
     statsMesh.material.colorWrite = true;
     statsMesh.material.transparent = false;
 
-    /** WebXR quad layer uses `local-floor` space: Y is meters above the physical floor (not 2D mesh Y). */
-    const statsMeshWebXRLayersQuadOptions = { yAbovePhysicalFloorMeters: 1.55 };
-
-    function getStatsQuadLayerRigidTransform () {
-
-        return new XRRigidTransform(
-            meshPositionToWebXRLayersQuadPosition(
-                {
-                    x: statsMesh.position.x,
-                    y: statsMesh.position.y,
-                    z: statsMesh.position.z
-                },
-                statsMeshWebXRLayersQuadOptions
-            ),
-            statsMesh.quaternion
-        );
-
-    }
-
     // video
 
     const videoWidth = 2064;
@@ -198,7 +177,9 @@ setTimeout(function init () {
         video.play();
     });
 
-    videoLayerManager = setupVideoLayerManager(video, 2064, 2208, 0.090579710, 0.0, -2.5);
+    // 6th arg `videoCenterY`: WebGL stereo mesh vertical offset (see 4efab14 "Vertically recenter video mesh layer").
+    // XRQuadLayer Y uses VIDEO_QUAD_LAYER_Y_OFFSET_METERS in setupVideoLayerManager (separate from mesh).
+    videoLayerManager = setupVideoLayerManager(video, 2064, 2208, 0.090579710, 0.0, -2.0);
 
     container.append(loadManager.div);
 
@@ -289,12 +270,6 @@ setTimeout(function init () {
 
             }
 
-            if (xrLayerGui !== null && xr.isPresenting) {
-
-                xrLayerGui.transform = getStatsQuadLayerRigidTransform();
-
-            }
-
             stats.begin();
 
             // const clippingPlanes  = setupPortalClippingPlanes(renderer, camera);
@@ -317,20 +292,8 @@ setTimeout(function init () {
 
                 gl.makeXRCompatible().then(() => {
 
-                    const glBinding = xr.getBinding(); // returns XRWebGLBinding
-
                     return currentSession.requestReferenceSpace('local-floor').then((refSpace) => {
 
-                     // Create GUI layer.
-                     xrLayerGui = glBinding.createQuadLayer({
-                        width: statsMesh.geometry.parameters.width,
-                        height: statsMesh.geometry.parameters.height,
-                        viewPixelWidth: statsMesh.material.map.image.width,
-                        viewPixelHeight: statsMesh.material.map.image.height,
-                        space: refSpace,
-                        transform: getStatsQuadLayerRigidTransform()
-                     });
-                     
                      xrLayerQuadVideo = videoLayerManager.initVideoLayer(true, renderer, scene, currentSession, refSpace);
 
                      videoLayerManager.videoLayerInitialized = true;
@@ -341,11 +304,9 @@ setTimeout(function init () {
                      currentSession.updateRenderState({
                         layers: baseProjection ? [
                             xrLayerQuadVideo,
-                            xrLayerGui,
                             baseProjection
                         ] : [
-                            xrLayerQuadVideo,
-                            xrLayerGui
+                            xrLayerQuadVideo
                         ]
                      });
 
@@ -353,20 +314,8 @@ setTimeout(function init () {
                }).catch((err) => {
                     console.error("WebXR layer stack setup failed:", err);
                     if (currentSession) delete currentSession.hasMediaLayer;
-                    xrLayerGui = null;
                     xrLayerQuadVideo = null;
                });
-
-            }
-
-            if (currentSession !== null && xrLayerGui !== null && (xrLayerGui.needsRedraw || xrLayerGui.needsUpdate)) {
-
-               const glayer = xr.getBinding().getSubImage(xrLayerGui, frame);
-               renderer.state.bindTexture(gl.TEXTURE_2D, glayer.colorTexture);
-               gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-               const canvas = statsMesh.material.map.image;
-               gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-               xrLayerGui.needsUpdate = false;
 
             }
 
@@ -516,7 +465,6 @@ setTimeout(function init () {
 
         console.log("Ended WebXR session!", session, config);
 
-        xrLayerGui = null;
         xrLayerQuadVideo = null;
 
         currentSession.removeEventListener("end", onSessionEnded);
