@@ -22,6 +22,7 @@ import {
     updateVideoQuadLayerPosition,
     isStationaryGridEnabled
 } from "./xr/stationaryView";
+import { meshPositionToWebXRLayersQuadPosition } from "./xr/meshPositionToWebXRLayersQuadPosition";
 
 let currentSession = null;
 let initXRLayers = true;
@@ -149,10 +150,34 @@ setTimeout(function init () {
     // statsMesh.position.y = 0.5;
     // statsMesh.position.z = -2.0;
     statsMesh.position.set(-1.5, 0.5, -2.0);
+    /** Restored on XR session end; 2D / first paint keeps the authored position above. */
+    const statsMeshPosition2D = statsMesh.position.clone();
+    /** Added to `statsMesh.position.y` only while immersive (Enter XR). Tune on headset. */
+    const STATS_MESH_Y_OFFSET_IMMERSIVE = 1.5;
+
     statsMesh.rotation.y = Math.PI / 4;
     statsMesh.scale.setScalar(4);
     statsMesh.material.colorWrite = true;
     statsMesh.material.transparent = false;
+
+    /** WebXR quad layer uses `local-floor` space: Y is meters above the physical floor (not 2D mesh Y). */
+    const statsMeshWebXRLayersQuadOptions = { yAbovePhysicalFloorMeters: 1.55 };
+
+    function getStatsQuadLayerRigidTransform () {
+
+        return new XRRigidTransform(
+            meshPositionToWebXRLayersQuadPosition(
+                {
+                    x: statsMesh.position.x,
+                    y: statsMesh.position.y,
+                    z: statsMesh.position.z
+                },
+                statsMeshWebXRLayersQuadOptions
+            ),
+            statsMesh.quaternion
+        );
+
+    }
 
     // video
 
@@ -264,6 +289,12 @@ setTimeout(function init () {
 
             }
 
+            if (xrLayerGui !== null && xr.isPresenting) {
+
+                xrLayerGui.transform = getStatsQuadLayerRigidTransform();
+
+            }
+
             stats.begin();
 
             // const clippingPlanes  = setupPortalClippingPlanes(renderer, camera);
@@ -297,7 +328,7 @@ setTimeout(function init () {
                         viewPixelWidth: statsMesh.material.map.image.width,
                         viewPixelHeight: statsMesh.material.map.image.height,
                         space: refSpace,
-                        transform: new XRRigidTransform(statsMesh.position, statsMesh.quaternion)
+                        transform: getStatsQuadLayerRigidTransform()
                      });
                      
                      xrLayerQuadVideo = videoLayerManager.initVideoLayer(true, renderer, scene, currentSession, refSpace);
@@ -469,6 +500,13 @@ setTimeout(function init () {
 
         console.log("Init video layer:", config.videoLayerManager.videoLayerInitialized, "useXRLayers:", config.useXRLayers);
 
+        if (renderer.xr.isPresenting) {
+
+            statsMesh.position.copy(statsMeshPosition2D);
+            statsMesh.position.y += STATS_MESH_Y_OFFSET_IMMERSIVE;
+
+        }
+
         video.play();
     }
 
@@ -483,6 +521,8 @@ setTimeout(function init () {
 
         currentSession.removeEventListener("end", onSessionEnded);
         currentSession = null;
+
+        statsMesh.position.copy(statsMeshPosition2D);
 
         if (videoLayerManager.videoLayerInitialized && !!config.videoLayerManager) {
             // Transition to WebGLLayer
