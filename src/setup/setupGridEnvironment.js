@@ -3,8 +3,11 @@ import * as THREE from "three";
 /**
  * Cyan Euclidean grid (floor + walls). For immersive-ar, leave background null so passthrough
  * is visible; an opaque scene.background would hide the camera feed.
+ *
+ * @param {THREE.Scene} scene - used for scene.background only
+ * @param {THREE.Object3D} [gridParent=scene] - parent for grid meshes (e.g. stationaryContent group)
  */
-export default function setupGridEnvironment(scene) {
+export default function setupGridEnvironment (scene, gridParent = scene) {
     const gridColor = 0x00ffff;
     const gridSize = 20;
     const gridDivisions = 20;
@@ -16,7 +19,7 @@ export default function setupGridEnvironment(scene) {
     floorGrid.position.y = -1.5;
     floorGrid.material.opacity = 0.45;
     floorGrid.material.transparent = true;
-    scene.add(floorGrid);
+    gridParent.add(floorGrid);
 
     // Back wall grid
     const backWall = new THREE.GridHelper(gridSize, gridDivisions, gridColor, gridColor);
@@ -25,7 +28,7 @@ export default function setupGridEnvironment(scene) {
     backWall.position.y = gridSize / 2 - 1.0;
     backWall.material.opacity = 0.25;
     backWall.material.transparent = true;
-    scene.add(backWall);
+    gridParent.add(backWall);
 
     // Left wall grid
     const leftWall = new THREE.GridHelper(gridSize, gridDivisions, gridColor, gridColor);
@@ -34,7 +37,7 @@ export default function setupGridEnvironment(scene) {
     leftWall.position.y = gridSize / 2 - 1.0;
     leftWall.material.opacity = 0.2;
     leftWall.material.transparent = true;
-    scene.add(leftWall);
+    gridParent.add(leftWall);
 
     // Right wall grid
     const rightWall = new THREE.GridHelper(gridSize, gridDivisions, gridColor, gridColor);
@@ -43,7 +46,7 @@ export default function setupGridEnvironment(scene) {
     rightWall.position.y = gridSize / 2 - 1.0;
     rightWall.material.opacity = 0.2;
     rightWall.material.transparent = true;
-    scene.add(rightWall);
+    gridParent.add(rightWall);
 
     return { floorGrid, backWall, leftWall, rightWall };
 }

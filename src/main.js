@@ -16,13 +16,18 @@ import setupVideoLayerManager from "./setup/setupVideoLayerManager";
 import setupGridEnvironment from "./setup/setupGridEnvironment";
 import createSubtitlePanel from "./ui/SubtitlePanel";
 import { checkControllerAction } from "./controllers";
+import {
+    getViewerMidpoint,
+    updateStationaryGroup,
+    updateVideoQuadLayerPosition,
+    isStationaryGridEnabled
+} from "./xr/stationaryView";
 
 let currentSession = null;
 let initXRLayers = true;
 let waiting_for_confirmation = false;
 
 /** Persisted across animation frames (must not be redeclared inside render). */
-let xrLayerGui = null;
 let xrLayerQuadVideo = null;
 
 setTimeout(function init () {
@@ -58,7 +63,8 @@ setTimeout(function init () {
     // renderer.outputEncoding = THREE.LinearEncoding;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.xr.enabled = true;
-    renderer.xr.setReferenceSpaceType('local');
+    // Align with XRQuadLayer space (local-floor) for consistent viewer midpoint V
+    renderer.xr.setReferenceSpaceType('local-floor');
 
     container.appendChild( renderer.domElement );
 
@@ -82,6 +88,12 @@ setTimeout(function init () {
     player = new THREE.Group();
 
     const scene = new THREE.Scene();
+    /** Grid + WebGL stereo video only; position = viewer translation V each frame when stationary mode is on. */
+    const stationaryContent = new THREE.Group();
+    scene.add(stationaryContent);
+
+    const stationaryGridEnabled = isStationaryGridEnabled();
+
     const controllerModelFactory = new XRControllerModelFactory();
     const controllers = {
         left: null,
@@ -136,6 +148,11 @@ setTimeout(function init () {
     // statsMesh.position.y = 0.5;
     // statsMesh.position.z = -2.0;
     statsMesh.position.set(-1.5, 0.5, -2.0);
+    /** Restored on XR session end; 2D / first paint keeps the authored position above. */
+    const statsMeshPosition2D = statsMesh.position.clone();
+    /** Added to `statsMesh.position.y` only while immersive (Enter XR). Tune on headset. */
+    const STATS_MESH_Y_OFFSET_IMMERSIVE = 1.5;
+
     statsMesh.rotation.y = Math.PI / 4;
     statsMesh.scale.setScalar(4);
     statsMesh.material.colorWrite = true;
@@ -160,7 +177,9 @@ setTimeout(function init () {
         video.play();
     });
 
-    videoLayerManager = setupVideoLayerManager(video, 2064, 2208, 0.090579710, 0.0, -2.5);
+    // 6th arg `videoCenterY`: WebGL stereo mesh vertical offset (see 4efab14 "Vertically recenter video mesh layer").
+    // XRQuadLayer Y uses VIDEO_QUAD_LAYER_Y_OFFSET_METERS in setupVideoLayerManager (separate from mesh).
+    videoLayerManager = setupVideoLayerManager(video, 2064, 2208, 0.090579710, 0.0, -2.0);
 
     container.append(loadManager.div);
 
@@ -172,16 +191,16 @@ setTimeout(function init () {
 
         currentSession = null;
 
-        videoLayerManager.initVideoLayer(false, renderer, scene, currentSession);
+        videoLayerManager.initVideoLayer(false, renderer, scene, currentSession, null, stationaryContent);
 
-        // Grid environment: dark void with cyan Euclidean grid
-        setupGridEnvironment(scene);
+        // Grid environment: dark void with cyan Euclidean grid (under stationaryContent with video mesh)
+        setupGridEnvironment(scene, stationaryContent);
+
+        const updateScene = await setupScene(scene, camera, controllers, player, videoLayerManager);
 
         // Subtitle panel: head-locked with smooth-follow physics
         subtitlePanel = createSubtitlePanel("Welcome...");
         subtitlePanel.initSubtitleLayer(scene);
-
-        const updateScene = await setupScene(scene, camera, controllers, player, videoLayerManager);
 
         renderer.setAnimationLoop(function render (t, frame ) {
 
@@ -237,6 +256,20 @@ setTimeout(function init () {
 
             waiting_for_confirmation = checkControllerAction(controllers, data, currentSession, waiting_for_confirmation);
 
+            const stationaryActive = stationaryGridEnabled && xr.isPresenting && currentSession !== null;
+            const viewerMid = getViewerMidpoint(renderer, frame);
+            updateStationaryGroup(stationaryContent, viewerMid, stationaryActive);
+
+            if (stationaryActive && xrLayerQuadVideo !== null && viewerMid) {
+
+                updateVideoQuadLayerPosition(
+                    xrLayerQuadVideo,
+                    videoLayerManager.videoQuadLayerBasePosition,
+                    viewerMid
+                );
+
+            }
+
             stats.begin();
 
             // const clippingPlanes  = setupPortalClippingPlanes(renderer, camera);
@@ -259,20 +292,8 @@ setTimeout(function init () {
 
                 gl.makeXRCompatible().then(() => {
 
-                    const glBinding = xr.getBinding(); // returns XRWebGLBinding
-
                     return currentSession.requestReferenceSpace('local-floor').then((refSpace) => {
 
-                     // Create GUI layer.
-                     xrLayerGui = glBinding.createQuadLayer({
-                        width: statsMesh.geometry.parameters.width,
-                        height: statsMesh.geometry.parameters.height,
-                        viewPixelWidth: statsMesh.material.map.image.width,
-                        viewPixelHeight: statsMesh.material.map.image.height,
-                        space: refSpace,
-                        transform: new XRRigidTransform(statsMesh.position, statsMesh.quaternion)
-                     });
-                     
                      xrLayerQuadVideo = videoLayerManager.initVideoLayer(true, renderer, scene, currentSession, refSpace);
 
                      videoLayerManager.videoLayerInitialized = true;
@@ -283,11 +304,9 @@ setTimeout(function init () {
                      currentSession.updateRenderState({
                         layers: baseProjection ? [
                             xrLayerQuadVideo,
-                            xrLayerGui,
                             baseProjection
                         ] : [
-                            xrLayerQuadVideo,
-                            xrLayerGui
+                            xrLayerQuadVideo
                         ]
                      });
 
@@ -295,20 +314,8 @@ setTimeout(function init () {
                }).catch((err) => {
                     console.error("WebXR layer stack setup failed:", err);
                     if (currentSession) delete currentSession.hasMediaLayer;
-                    xrLayerGui = null;
                     xrLayerQuadVideo = null;
                });
-
-            }
-
-            if (currentSession !== null && xrLayerGui !== null && (xrLayerGui.needsRedraw || xrLayerGui.needsUpdate)) {
-
-               const glayer = xr.getBinding().getSubImage(xrLayerGui, frame);
-               renderer.state.bindTexture(gl.TEXTURE_2D, glayer.colorTexture);
-               gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-               const canvas = statsMesh.material.map.image;
-               gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-               xrLayerGui.needsUpdate = false;
 
             }
 
@@ -442,6 +449,13 @@ setTimeout(function init () {
 
         console.log("Init video layer:", config.videoLayerManager.videoLayerInitialized, "useXRLayers:", config.useXRLayers);
 
+        if (renderer.xr.isPresenting) {
+
+            statsMesh.position.copy(statsMeshPosition2D);
+            statsMesh.position.y += STATS_MESH_Y_OFFSET_IMMERSIVE;
+
+        }
+
         video.play();
     }
 
@@ -451,18 +465,19 @@ setTimeout(function init () {
 
         console.log("Ended WebXR session!", session, config);
 
-        xrLayerGui = null;
         xrLayerQuadVideo = null;
 
         currentSession.removeEventListener("end", onSessionEnded);
         currentSession = null;
+
+        statsMesh.position.copy(statsMeshPosition2D);
 
         if (videoLayerManager.videoLayerInitialized && !!config.videoLayerManager) {
             // Transition to WebGLLayer
             console.log("Clear video layer");
             config.videoLayerManager.clearVideoLayer(true, renderer, scene, session);
             console.log("Init video layer");
-            config.videoLayerManager.initVideoLayer(false, renderer, scene, session);
+            config.videoLayerManager.initVideoLayer(false, renderer, scene, session, null, stationaryContent);
         }
     }
 

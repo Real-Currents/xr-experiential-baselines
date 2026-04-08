@@ -1,10 +1,12 @@
 import * as THREE from "three";
 import { Text } from "troika-three-text";
+import { VIDEO_QUAD_Y_RECENTER_DELTA_METERS } from "../setup/setupVideoLayerManager.js";
 
 /**
  * Creates a head-locked subtitle panel with smooth-follow (lerp) physics.
  *
  * The panel floats 1.5m in front of the camera, 0.25m below eye level,
+ * minus half of `VIDEO_QUAD_Y_RECENTER_DELTA_METERS` (split between pre-recenter height and full video shift),
  * and follows head rotation with an elastic delay (lerp factor 0.08).
  *
  * Uses the same dual-mode pattern as setupVideoLayerManager:
@@ -91,6 +93,7 @@ export default function createSubtitlePanel(initialText = "Welcome...") {
             .copy(camera.position)
             .add(_direction.multiplyScalar(followDistance));
         _targetPosition.y += verticalOffset;
+        _targetPosition.y -= VIDEO_QUAD_Y_RECENTER_DELTA_METERS * 0.5;
 
         if (!initialized) {
             // Snap to target on first frame (no lerp delay)
