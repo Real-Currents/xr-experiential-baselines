@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const verge3dRoot = resolve(__dirname, "public/libs/verge3d");
 const jsmRoot = resolve(__dirname, "public/libs/jsm");
+const iwsdkRoot = resolve(__dirname, "../immersive-web-sdk/packages");
 
 const local_certs = (fs.existsSync('./certs'));
 
@@ -39,6 +40,22 @@ export default {
     },
     resolve: {
         alias: [
+            {
+                find: "@iwsdk/core",
+                replacement: resolve(iwsdkRoot, "core/dist/index.js")
+            },
+            {
+                find: "@iwsdk/xr-input",
+                replacement: resolve(iwsdkRoot, "xr-input/dist/index.js")
+            },
+            {
+                find: "@iwsdk/locomotor",
+                replacement: resolve(iwsdkRoot, "locomotor/dist/index.js")
+            },
+            {
+                find: "@iwsdk/glxf",
+                replacement: resolve(iwsdkRoot, "glxf/dist/index.js")
+            },
             // Import maps in public/*.html are not applied during Vite's dep scan;
             // mirror webxr_vr_layers.v3d.html so bare "v3d" / "v3d/addons/*" resolve.
             {
@@ -49,9 +66,6 @@ export default {
                 find: "v3d",
                 replacement: resolve(verge3dRoot, "build/v3d.module.js")
             },
-            // {
-            //     find: "@", replacement: resolve(__dirname, "./src"),
-            // },
             {
                 find: "./runtimeConfig", replacement: "./runtimeConfig.browser"
             },
@@ -76,12 +90,7 @@ export default {
     ] : [
         /* If certs not available, use basicSsl plugin as workaround for HTTPS */
         basicSsl({
-            /** name of certification */
             name: 'test',
-            // /** custom trust domains */
-            // domains: ['*.custom.com'],
-            // /** custom certification directory */
-            // certDir: '/Users/.../.devServer/cert'
         }),
         shader({
             // All match files will be parsed by default,
