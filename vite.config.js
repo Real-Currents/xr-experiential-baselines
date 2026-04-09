@@ -21,6 +21,7 @@ export default {
         rollupOptions: {
             input: {
                 app: path.resolve(__dirname, './src/main.js'),
+                main: path.resolve(__dirname, 'index.html'),
             },
         },
     },
