@@ -46,7 +46,7 @@ export function getViewerMidpoint (renderer, frame, target = _vMid) {
  * @param {THREE.Vector3 | null} V
  * @param {boolean} enabled
  */
-export function updateStationaryGroup (group, V, enabled) {
+export function updateStationaryGroup (group, V, enabled, offset = null) {
 
     if (!enabled || !V) {
 
@@ -55,6 +55,7 @@ export function updateStationaryGroup (group, V, enabled) {
     } else {
 
         group.position.copy(V);
+        if (offset) group.position.add(offset);
 
     }
 

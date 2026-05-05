@@ -22,6 +22,9 @@ import {
     updateVideoQuadLayerPosition,
     isStationaryGridEnabled
 } from "./xr/stationaryView";
+import { World } from "./ecs/World";
+import { GridTransform } from "./ecs/components/GridTransform";
+import { GridMovementSystem } from "./ecs/systems/GridMovementSystem";
 
 let currentSession = null;
 let initXRLayers = true;
@@ -179,7 +182,7 @@ setTimeout(function init () {
 
     // 6th arg `videoCenterY`: WebGL stereo mesh vertical offset (see 4efab14 "Vertically recenter video mesh layer").
     // XRQuadLayer Y uses VIDEO_QUAD_LAYER_Y_OFFSET_METERS in setupVideoLayerManager (separate from mesh).
-    videoLayerManager = setupVideoLayerManager(video, 2064, 2208, 0.090579710, 0.0, -2.0);
+    videoLayerManager = setupVideoLayerManager(video, 2064, 2208, 0.090579710, 0.0, -1.5);
 
     container.append(loadManager.div);
 
@@ -194,7 +197,13 @@ setTimeout(function init () {
         videoLayerManager.initVideoLayer(false, renderer, scene, currentSession, null, stationaryContent);
 
         // Grid environment: dark void with cyan Euclidean grid (under stationaryContent with video mesh)
-        setupGridEnvironment(scene, stationaryContent);
+        const gridResult = setupGridEnvironment(scene, stationaryContent);
+
+        // ECS world for persistent grid state — lightweight, no framework migration needed
+        const world = new World();
+        const gridEntity = world.createEntity('stationaryGrid');
+        world.addComponent(gridEntity, GridTransform.type, GridTransform.create(gridResult.initialState));
+        world.registerSystem(new GridMovementSystem(controllers, camera));
 
         const updateScene = await setupScene(scene, camera, controllers, player, videoLayerManager);
 
@@ -256,9 +265,12 @@ setTimeout(function init () {
 
             waiting_for_confirmation = checkControllerAction(controllers, data, currentSession, waiting_for_confirmation);
 
+            world.update(delta);
+            const gridOffset = world.getComponent('stationaryGrid', 'GridTransform').offset;
+
             const stationaryActive = stationaryGridEnabled && xr.isPresenting && currentSession !== null;
             const viewerMid = getViewerMidpoint(renderer, frame);
-            updateStationaryGroup(stationaryContent, viewerMid, stationaryActive);
+            updateStationaryGroup(stationaryContent, viewerMid, stationaryActive, gridOffset);
 
             if (stationaryActive && xrLayerQuadVideo !== null && viewerMid) {
 
