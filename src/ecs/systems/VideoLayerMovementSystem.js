@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 
 /**
- * ECS-like system that reads the LEFT controller thumbstick Y-axis and
- * integrates a persistent offset into GridTransform components.
+ * ECS-like system that reads the RIGHT controller thumbstick Y-axis and
+ * integrates a persistent offset into VideoLayerTransform components.
  *
- * - Push left stick forward  → grid moves away from viewer (+Z)
- * - Pull left stick backward → grid moves toward viewer (-Z)
+ * - Push right stick forward  → video moves away from viewer (+Z)
+ * - Pull right stick backward → video moves toward viewer (-Z)
  */
-export class GridMovementSystem {
+export class VideoLayerMovementSystem {
     /**
      * @param {object} controllers — { left: { gamepad, ... }, right: { gamepad, ... } }
      */
@@ -21,23 +21,21 @@ export class GridMovementSystem {
      * @param {import('../World').World} world
      */
     update(deltaTime, world) {
-        const transforms = world.query('GridTransform');
+        const transforms = world.query('VideoLayerTransform');
         if (transforms.length === 0) return;
 
-        // For now we only support a single grid transform (the stationary grid)
         const transform = transforms[0];
         const { deadzone, speed, smoothing, maxOffset } = transform;
 
-        // Gather thumbstick input from LEFT hand only
-        let active = false;
         let stickY = 0;
+        let active = false;
 
-        const left = this.controllers.left?.gamepad;
+        const right = this.controllers.right?.gamepad;
 
-        if (left) {
+        if (right) {
             try {
                 // WebXR controllers use 'xr-standard' mapping with THUMBSTICK_Y per-controller
-                const rawY = left.getAxis('THUMBSTICK_Y');
+                const rawY = right.getAxis('THUMBSTICK_Y');
                 if (Math.abs(rawY) > deadzone) {
                     stickY = -rawY; // negate: forward push (negative raw) → positive movement
                     active = true;
@@ -45,7 +43,7 @@ export class GridMovementSystem {
             } catch (_) {
                 // Fallback for non-XR standard layouts
                 try {
-                    const rawY = left.getAxis('THUMBSTICK_LEFT_Y');
+                    const rawY = right.getAxis('THUMBSTICK_RIGHT_Y');
                     if (Math.abs(rawY) > deadzone) {
                         stickY = -rawY;
                         active = true;
@@ -54,8 +52,7 @@ export class GridMovementSystem {
             }
         }
 
-        // Fixed world-space Z direction: thumbstick forward pushes grid toward +Z,
-        // matching the XRQuadLayer's perpendicular offset direction.
+        // Fixed world-space Z direction: thumbstick forward pushes video toward +Z.
         this._forward.set(0, 0, 1);
 
         // Integrate velocity
@@ -81,4 +78,4 @@ export class GridMovementSystem {
     }
 }
 
-export default GridMovementSystem;
+export default VideoLayerMovementSystem;
