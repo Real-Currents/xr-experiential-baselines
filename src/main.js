@@ -272,6 +272,11 @@ setTimeout(function init () {
 
             waiting_for_confirmation = checkControllerAction(controllers, data, currentSession, waiting_for_confirmation);
 
+            if (data.action === "toggle_grid") {
+                const gt = world.getComponent('stationaryGrid', 'GridTransform');
+                if (gt) gt.showGrid = !gt.showGrid;
+            }
+
             world.update(delta);
             const gridTransform = world.getComponent('stationaryGrid', 'GridTransform');
             const videoTransform = world.getComponent('videoLayer', 'VideoLayerTransform');
@@ -281,6 +286,13 @@ setTimeout(function init () {
             const stationaryActive = stationaryGridEnabled && xr.isPresenting && currentSession !== null;
             const viewerMid = getViewerMidpoint(renderer, frame);
             updateStationaryGroup(stationaryContent, viewerMid, stationaryActive, gridOffset);
+
+            // Apply per-mesh grid visibility (left Y-button toggle) without hiding other stationaryContent children
+            if (gridTransform) {
+                Object.values(gridResult.meshes).forEach(mesh => {
+                    mesh.visible = gridTransform.showGrid;
+                });
+            }
 
             // Apply independent video offset to WebGL stereo mesh
             if (videoOffset && videoLayerManager.webGLVideo) {

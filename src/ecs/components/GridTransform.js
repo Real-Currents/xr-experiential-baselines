@@ -15,6 +15,7 @@ export function createGridTransform(overrides = {}) {
         maxOffset: overrides.maxOffset ?? 5.0,
         smoothing: overrides.smoothing ?? 5.0,
         deadzone: overrides.deadzone ?? 0.15,
+        showGrid: overrides.showGrid ?? true,
     };
 }
 

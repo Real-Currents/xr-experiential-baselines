@@ -118,6 +118,7 @@ export function checkControllerAction(controllers, data, session, waiting = wait
                 waiting_for_confirmation = false;
             }
 
+            data.action = "toggle_grid";
             data.waiting_for_confirmation = waiting_for_confirmation;
 
         } else {
