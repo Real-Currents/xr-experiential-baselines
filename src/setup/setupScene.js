@@ -13,6 +13,7 @@ export default async function setupScene (
     camera,
     controllers,
     player,
+    stationaryContent,
     videoLayerManager
 ) {
 
@@ -88,6 +89,12 @@ export default async function setupScene (
             if (sceneDataIn.hasOwnProperty("action")) {
                 if (sceneDataIn["action"] === "start_video") {
                     videoLayerManager.video.play();
+                } else if (sceneDataIn["action"] === "toggle_grid") {
+                    if (stationaryContent.gridMeshes) {
+                        Object.values(stationaryContent.gridMeshes).forEach(mesh => {
+                            mesh.visible = !mesh.visible;
+                        });
+                    }
                 }
             }
         }
@@ -95,5 +102,13 @@ export default async function setupScene (
         if (typeof sceneDataOut === "function") {
             sceneDataOut(data_out);
         }
+
+        // Dynamic object spawn pattern for stationaryContent
+        // 1. Spawn via command: check sceneDataIn.action or controller state, create geometry+material,
+        //    set mesh.name, then stationaryContent.add(mesh).
+        // 2. Track in a local Map inside setupScene: const dynamicObjects = new Map(); // name -> Object3D
+        // 3. Update/animate/remove each frame: dynamicObjects.forEach((mesh) => { ... })
+        // 4. Preserve existing children: never set stationaryContent.visible = false globally.
+        //    Target specific children only (by name, userData, or via stationaryContent.gridMeshes).
     }
 }
