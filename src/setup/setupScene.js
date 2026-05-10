@@ -3,6 +3,8 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 
 import loadManager from "../setup/setupLoadManager";
 
+import rotatingCube from "../objects/rotatingCube";
+
 const gltfLoader = new GLTFLoader(loadManager);
 
 const gloveGroup_01 = new THREE.Group();
@@ -50,6 +52,9 @@ export default async function setupScene (
     sceneGroup.translateX(sceneX);
     sceneGroup.translateY(sceneY);
     sceneGroup.translateZ(sceneZ);
+
+    // Place objects
+    sceneGroup.add(rotatingCube);
 
     return function updateScene (currentSession, delta, time, sceneDataIn, sceneDataOut) {
 
@@ -110,5 +115,8 @@ export default async function setupScene (
         // 3. Update/animate/remove each frame: dynamicObjects.forEach((mesh) => { ... })
         // 4. Preserve existing children: never set stationaryContent.visible = false globally.
         //    Target specific children only (by name, userData, or via stationaryContent.gridMeshes).
+
+        rotatingCube.rotX(0.01);
+        rotatingCube.rotY(0.01);
     }
 }
