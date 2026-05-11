@@ -54,7 +54,10 @@ export default async function setupScene (
     sceneGroup.translateZ(sceneZ);
 
     // Place objects
-    sceneGroup.add(rotatingCube);
+    // rotatingCube.position.copy(sceneDataIn.spawnPosition || new THREE.Vector3(0, 0, -2));
+    rotatingCube.position.copy(new THREE.Vector3(0.0, 0.5, -5.0));
+    rotatingCube.name = "spawned-box-" + Date.now();
+    stationaryContent.add(rotatingCube);
 
     return function updateScene (currentSession, delta, time, sceneDataIn, sceneDataOut) {
 
@@ -88,13 +91,11 @@ export default async function setupScene (
             }
         }
 
-        if (typeof sceneDataIn === "object" && sceneDataIn != null) {
-            console.log("sceneDataIn:", sceneDataIn);
-
-            if (sceneDataIn.hasOwnProperty("action")) {
-                if (sceneDataIn["action"] === "start_video") {
+        if (Array.isArray(sceneDataIn) && sceneDataIn.length > 0) {
+            for (const event of sceneDataIn) {
+                if (event.action === "start_video") {
                     videoLayerManager.video.play();
-                } else if (sceneDataIn["action"] === "toggle_grid") {
+                } else if (event.action === "toggle_grid") {
                     if (stationaryContent.gridMeshes) {
                         Object.values(stationaryContent.gridMeshes).forEach(mesh => {
                             mesh.visible = !mesh.visible;

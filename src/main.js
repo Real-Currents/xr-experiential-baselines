@@ -184,7 +184,7 @@ setTimeout(function init () {
 
     // 6th arg `videoCenterY`: WebGL stereo mesh vertical offset (see 4efab14 "Vertically recenter video mesh layer").
     // XRQuadLayer Y uses VIDEO_QUAD_LAYER_Y_OFFSET_METERS in setupVideoLayerManager (separate from mesh).
-    videoLayerManager = setupVideoLayerManager(video, 2064, 2208, 0.090579710, 0.0, -2.0);
+    videoLayerManager = setupVideoLayerManager(video, 2064, 2208, 0.090579710);
 
     container.append(loadManager.div);
 
@@ -205,7 +205,10 @@ setTimeout(function init () {
         const world = new World();
 
         const gridEntity = world.createEntity('stationaryGrid');
-        world.addComponent(gridEntity, GridTransform.type, GridTransform.create(gridResult.initialState));
+        world.addComponent(gridEntity, GridTransform.type, GridTransform.create({
+            ...gridResult.initialState,
+            // maxOffset: 10.0
+        }));
         world.registerSystem(new GridMovementSystem(controllers, camera));
 
         const videoEntity = world.createEntity('videoLayer');
@@ -220,7 +223,7 @@ setTimeout(function init () {
 
         renderer.setAnimationLoop(function render (t, frame ) {
 
-            const data = {};
+            const data = [];
             const delta = clock.getDelta();
             const time = clock.getElapsedTime();
 
@@ -355,7 +358,7 @@ setTimeout(function init () {
                 currentSession,
                 delta,
                 time,
-                (data.hasOwnProperty("action")) ? data : null,
+                data.length > 0 ? data : null,
                 null
                 //, [
                 //     ...clippingPlanes
