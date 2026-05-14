@@ -95,6 +95,7 @@ setTimeout(function init () {
     const scene = new THREE.Scene();
     /** Grid + WebGL stereo video only; position = viewer translation V each frame when stationary mode is on. */
     const stationaryContent = new THREE.Group();
+    stationaryContent.edit = true;
     scene.add(stationaryContent);
 
     const stationaryGridEnabled = isStationaryGridEnabled();
@@ -209,11 +210,11 @@ setTimeout(function init () {
             ...gridResult.initialState,
             // maxOffset: 10.0
         }));
-        world.registerSystem(new GridMovementSystem(controllers, camera));
+        world.registerSystem(new GridMovementSystem(controllers, stationaryContent));
 
         const videoEntity = world.createEntity('videoLayer');
         world.addComponent(videoEntity, VideoLayerTransform.type, VideoLayerTransform.create());
-        world.registerSystem(new VideoLayerMovementSystem(controllers));
+        world.registerSystem(new VideoLayerMovementSystem(controllers, stationaryContent));
 
         const updateScene = await setupScene(scene, camera, controllers, player, stationaryContent, videoLayerManager);
 
@@ -274,6 +275,18 @@ setTimeout(function init () {
             
 
             waiting_for_confirmation = checkControllerAction(controllers, data, currentSession, waiting_for_confirmation);
+
+            if (Array.isArray(data) && data.length > 0) {
+                for (const event of data) {
+                    if (event.action === "toggle_grid") {
+                        const gt = world.getComponent('stationaryGrid', 'GridTransform');
+                        if (gt) {
+                            gt.showGrid = !gt.showGrid;
+                            stationaryContent.edit = gt.showGrid;
+                        }
+                    }
+                }
+            }
 
             world.update(delta);
             const gridTransform = world.getComponent('stationaryGrid', 'GridTransform');

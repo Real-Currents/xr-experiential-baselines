@@ -10,9 +10,11 @@ import * as THREE from 'three';
 export class VideoLayerMovementSystem {
     /**
      * @param {object} controllers — { left: { gamepad, ... }, right: { gamepad, ... } }
+     * @param {THREE.Group} stationaryContent — the group being repositioned; its `.edit` flag gates movement
      */
-    constructor(controllers) {
+    constructor(controllers, stationaryContent) {
         this.controllers = controllers;
+        this.stationaryContent = stationaryContent;
         this._forward = new THREE.Vector3();
     }
 
@@ -21,6 +23,8 @@ export class VideoLayerMovementSystem {
      * @param {import('../World').World} world
      */
     update(deltaTime, world) {
+        if (!this.stationaryContent.edit) return;
+
         const transforms = world.query('VideoLayerTransform');
         if (transforms.length === 0) return;
 
